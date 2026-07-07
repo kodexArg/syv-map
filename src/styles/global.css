@@ -1,1 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;800&family=DM+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+
+/*
+ * Tokens ported verbatim from ~/SyV/syv-frontend/src/styles/global.css
+ * (read-only source — do not edit it). Only the raw token values travel
+ * here; syv-frontend's component CSS (.card/.chip/etc.) is Astro-6-specific
+ * and stays there.
+ */
+:root {
+  --ink-1000: #0C0B09;
+  --ink-900: #141210;
+  --ink-850: #1a1714;
+  --ink-600: #3a352f;
+  --ink-500: #6b6358;
+  --cream-100: #F3EEE4;
+  --warm-200: #cdbfa8;
+  --orange-500: #ff8c42;
+  --orange-400: #ffaa70;
+  --orange-deep: #FF6A1A;
+  --orange-600: #E25510;
+  --teal-500: #4FA6AB;
+  --teal-300: #7cc4c8;
+  --sage-500: #87A878;
+  --sage-300: #a9c49e;
+  --good: var(--sage-500);
+  --warn: var(--orange-500);
+  --bad: #d9694e;
+  --font-sans: 'Nunito', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --hairline: 1.5px solid var(--ink-600);
+
+  /* shadcn-svelte theme contract, driven by the tokens above (not the
+     default shadcn palette) — dark warm-ink surface, orange accent. */
+  --background: var(--ink-1000);
+  --foreground: var(--cream-100);
+  --card: var(--ink-900);
+  --card-foreground: var(--cream-100);
+  --popover: var(--ink-900);
+  --popover-foreground: var(--cream-100);
+  --primary: var(--orange-500);
+  --primary-foreground: var(--ink-1000);
+  --secondary: var(--teal-500);
+  --secondary-foreground: var(--ink-1000);
+  --muted: var(--ink-850);
+  --muted-foreground: var(--warm-200);
+  --accent: var(--sage-500);
+  --accent-foreground: var(--ink-1000);
+  --destructive: var(--bad);
+  --border: var(--ink-600);
+  --input: var(--ink-600);
+  --ring: var(--orange-500);
+  --radius: var(--radius-md);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}

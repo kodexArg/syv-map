@@ -51,6 +51,19 @@ mínimo con una sola fuente raster (CartoDB Voyager). Para cambiar de basemap:
 - Un estilo vectorial completo: cambiá el objeto `style` por una URL a un
   `style.json` (ej. un estilo demo de MapLibre o uno propio hosteado).
 
+## Estilo — tokens heredados de syv-frontend
+
+Los colores/fuentes/radios vienen literal de `~/SyV/syv-frontend/src/styles/global.css`
+(fuente de solo lectura — no se toca), portados a `src/styles/global.css` como
+variables CSS + un bloque `@theme inline` de Tailwind v4. Fondo tinta cálida
+oscura (`--ink-1000`), texto crema, acento naranja (`--orange-500`), secundarios
+teal/sage. Tipografía Nunito (sans) + DM Mono (mono). No se copió el CSS de
+componentes de syv-frontend (`.card`/`.chip`, específico de su Astro 6) — solo
+los tokens crudos, para no duplicar lenguaje visual.
+
+Las variables de tema de shadcn-svelte (`--background`, `--primary`, `--border`,
+etc.) están mapeadas sobre estos tokens en vez de la paleta default de shadcn.
+
 ## Stack (versiones resueltas al scaffoldear)
 
 | Paquete | Versión |
@@ -61,9 +74,12 @@ mínimo con una sola fuente raster (CartoDB Voyager). Para cambiar de basemap:
 | @tailwindcss/vite + tailwindcss | ^4.3.2 |
 | maplibre-gl | ^5.24.0 |
 
-El panel lateral (toggle de capas) está escrito a mano con Tailwind — no se
-usó el CLI de `shadcn-svelte` porque su flujo `init` (v1.3.0) quedó atado a
-un prompt interactivo de selección de preset que no acepta input no-interactivo
-limpio. Para un solo panel de checkboxes no valía la pena pelear el flujo;
-si más adelante hace falta un design system completo, correr
-`npx shadcn-svelte@latest init` a mano (interactivo) y migrar el panel.
+El panel lateral (toggle de capas) está escrito a mano con Tailwind, usando
+las clases de tema (`bg-card`, `border-border`, `text-foreground`, etc.) que
+resuelven a los tokens de syv-frontend — no al default de shadcn-svelte. No se
+usó el CLI `shadcn-svelte init` porque su flujo (v1.3.0) quedó atado a un
+prompt interactivo de selección de preset que no acepta input no-interactivo
+limpio. Para un solo panel de checkboxes no valía la pena pelear el flujo; si
+más adelante hace falta el design system completo de shadcn-svelte, correr
+`npx shadcn-svelte@latest init` a mano (interactivo) y conectarlo a las mismas
+variables de `global.css` en vez de regenerar el theme default.
