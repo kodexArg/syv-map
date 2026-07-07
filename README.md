@@ -7,8 +7,8 @@ sobre un mapa y poder intercambiarlos sin tocar código.
 ## Cómo correr
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Abre `http://localhost:4321`. El mapa centra en Ciudad Dársena
@@ -16,7 +16,7 @@ Abre `http://localhost:4321`. El mapa centra en Ciudad Dársena
 (gratis, sin API key).
 
 Alternativa (recomendada por el harness de este repo): correr el server en
-background con `npx astro dev --background`, y gestionarlo con
+background con `bunx astro dev --background`, y gestionarlo con
 `astro dev stop` / `astro dev status` / `astro dev logs`.
 
 ## Cómo agregar un polígono
@@ -81,5 +81,5 @@ usó el CLI `shadcn-svelte init` porque su flujo (v1.3.0) quedó atado a un
 prompt interactivo de selección de preset que no acepta input no-interactivo
 limpio. Para un solo panel de checkboxes no valía la pena pelear el flujo; si
 más adelante hace falta el design system completo de shadcn-svelte, correr
-`npx shadcn-svelte@latest init` a mano (interactivo) y conectarlo a las mismas
+`bunx shadcn-svelte@latest init` a mano (interactivo) y conectarlo a las mismas
 variables de `global.css` en vez de regenerar el theme default.
