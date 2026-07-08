@@ -61,5 +61,26 @@
     "path": "/polygons/area-1783479651570.geojson",
     "color": "#080808",
     "defaultVisible": true
+  },
+  {
+    "id": "area-1783489869362",
+    "label": "El Pantano",
+    "path": "/polygons/area-1783489869362.geojson",
+    "color": "#dafbeb",
+    "defaultVisible": false
+  },
+  {
+    "id": "area-1783490935050",
+    "label": "Lago Muerto",
+    "path": "/polygons/area-1783490935050.geojson",
+    "color": "#42f2ff",
+    "defaultVisible": false
+  },
+  {
+    "id": "area-1783491220752",
+    "label": "ZDM",
+    "path": "/polygons/area-1783491220752.geojson",
+    "color": "#bbe8be",
+    "defaultVisible": false
   }
 ]

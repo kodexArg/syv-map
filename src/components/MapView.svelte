@@ -47,6 +47,103 @@
     return JSON.parse(JSON.stringify(v));
   }
 
+  // --- el Cuerpo de Hielo: impacto hardcodeado -------------------------------
+  // Punto y zonas de efecto del meteorito de 2039 (el Cuerpo de Hielo),
+  // transcriptos de ~/Documents/maps/mapa_impacto_buenos_aires.html. Coordenadas
+  // reales de Buenos Aires. Es contexto fijo del universo: no vive en el store
+  // ni en localStorage, no se edita ni se borra — siempre está, debajo de las
+  // regiones de Dársena. El centro cae ~14 km al NO de Dársena, que por eso
+  // queda justo sobre el borde de la zona amarilla.
+  const IMPACT_CENTER: [number, number] = [-58.5168464, -34.5554235];
+  const IMPACT_ZONES = [
+    { radius: 35000, color: '#008000', fillOpacity: 0.2, label: '35 km' }, // verde
+    { radius: 14000, color: '#ffd700', fillOpacity: 0.3, label: '14 km' }, // amarillo
+    { radius: 6400, color: '#ff8c00', fillOpacity: 0.4, label: '6,4 km' }, // naranja
+    { radius: 1400, color: '#ff0000', fillOpacity: 0.5, label: '1,4 km' }, // rojo
+    { radius: 800, color: '#333333', fillOpacity: 0.8, label: 'Cráter · 800 m' }, // cráter
+  ];
+
+  // El impacto es un GRUPO toggleable aparte de las regiones: su botón prende y
+  // apaga las cinco zonas juntas. Sigue siendo contexto fijo (no editable, no en
+  // el store) — sólo se le agrega visibilidad conmutable. Arranca APAGADO: es el
+  // estado canónico elegido (el mapa se lee limpio; se enciende bajo demanda).
+  let impactVisible = $state(false);
+  function toggleImpact() {
+    impactVisible = !impactVisible;
+  }
+  function applyImpactVisibility() {
+    if (!map || !mapLoaded) return;
+    const vis = impactVisible ? 'visible' : 'none';
+    for (const id of ['impacto-meteorito-fill', 'impacto-meteorito-line']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+    }
+  }
+  // Re-aplica cuando cambia el toggle o cuando el mapa termina de cargar (las
+  // capas del impacto se agregan recién en addImpactOverlay, tras mapLoaded).
+  $effect(() => {
+    impactVisible;
+    mapLoaded;
+    applyImpactVisibility();
+  });
+
+  // Aproxima un círculo geodésico como anillo poligonal de `steps` puntos.
+  // Suficiente (<0.5% de error a escala urbana) para las cinco zonas sin
+  // depender de turf. Radio en metros; devuelve coords GeoJSON [lon, lat].
+  function circlePolygon(lon: number, lat: number, radiusM: number, steps = 96): number[][][] {
+    const R = 6378137; // radio terrestre (m)
+    const latR = (lat * Math.PI) / 180;
+    const lonR = (lon * Math.PI) / 180;
+    const d = radiusM / R; // distancia angular
+    const ring: number[][] = [];
+    for (let i = 0; i <= steps; i++) {
+      const brng = (i / steps) * 2 * Math.PI;
+      const lat2 = Math.asin(
+        Math.sin(latR) * Math.cos(d) + Math.cos(latR) * Math.sin(d) * Math.cos(brng),
+      );
+      const lon2 =
+        lonR +
+        Math.atan2(
+          Math.sin(brng) * Math.sin(d) * Math.cos(latR),
+          Math.cos(d) - Math.sin(latR) * Math.sin(lat2),
+        );
+      ring.push([(lon2 * 180) / Math.PI, (lat2 * 180) / Math.PI]);
+    }
+    return [ring];
+  }
+
+  // Dibuja las zonas de impacto como una capa fija. Un solo source con las cinco
+  // features en orden mayor→menor: dentro de la capa, la última (el cráter) queda
+  // arriba. Color/opacidad data-driven por feature, igual que las regiones. Las
+  // regiones del store se moveLayer() al tope en cada sync, así que esto queda
+  // siempre de fondo.
+  function addImpactOverlay(m: maplibregl.Map) {
+    if (m.getSource('impacto-meteorito')) return;
+    const features = IMPACT_ZONES.map((z) => ({
+      type: 'Feature' as const,
+      properties: { color: z.color, fillOpacity: z.fillOpacity },
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: circlePolygon(IMPACT_CENTER[0], IMPACT_CENTER[1], z.radius),
+      },
+    }));
+    m.addSource('impacto-meteorito', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features },
+    });
+    m.addLayer({
+      id: 'impacto-meteorito-fill',
+      type: 'fill',
+      source: 'impacto-meteorito',
+      paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['get', 'fillOpacity'] },
+    });
+    m.addLayer({
+      id: 'impacto-meteorito-line',
+      type: 'line',
+      source: 'impacto-meteorito',
+      paint: { 'line-color': ['get', 'color'], 'line-width': 1, 'line-opacity': 0.6 },
+    });
+  }
+
   // --- reconcile store.layers -> maplibre sources/layers ---------------------
   function syncMap() {
     if (!map || !mapLoaded) return;
@@ -271,6 +368,8 @@
 
     await new Promise<void>((res) => map!.on('load', () => res()));
     mapLoaded = true;
+    // fondo fijo del universo, antes de sembrar las regiones editables
+    addImpactOverlay(map);
     await loadLayers();
   });
 
@@ -358,5 +457,29 @@
         </li>
       {/if}
     </ul>
+
+    <!-- Grupo fijo del universo: el impacto del Cuerpo de Hielo (2039). Un solo
+         toggle prende/apaga sus cinco zonas juntas; no se edita ni se guarda. -->
+    <div class="mt-3 border-t border-border pt-3">
+      <div class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={impactVisible}
+          onchange={toggleImpact}
+          class="h-4 w-4 rounded border-border accent-primary"
+        />
+        <span class="flex-1 truncate text-sm font-semibold text-foreground">Cuerpo de Hielo · 2039</span>
+        <span class="text-[10px] font-mono text-muted-foreground">impacto</span>
+      </div>
+      <ul class="mt-1.5 space-y-0.5 pl-6 transition-opacity {impactVisible ? '' : 'opacity-40'}">
+        <li class="mb-0.5 text-[10px] font-mono uppercase tracking-wide text-muted-foreground/70">Zonas de efecto</li>
+        {#each IMPACT_ZONES as z (z.radius)}
+          <li class="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span class="h-2.5 w-2.5 shrink-0 rounded-full border border-border" style={`background:${z.color}`}></span>
+            <span>{z.label}</span>
+          </li>
+        {/each}
+      </ul>
+    </div>
   </aside>
 </div>
