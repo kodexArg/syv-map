@@ -24,6 +24,7 @@
     isEditable,
     isEmpty,
     hasArea,
+    roundCoords,
   } from '../lib/mapStore.svelte';
 
   let mapContainer: HTMLDivElement;
@@ -150,6 +151,8 @@
       const mode = t === 'Polygon' ? 'polygon' : t === 'LineString' ? 'linestring' : null;
       if (!mode) continue;
       const f = snapshot(src[i]);
+      // Terra Draw rejects >9-decimal coords; clamp legacy/boolean-op geometry.
+      f.geometry.coordinates = roundCoords(f.geometry.coordinates);
       const terraId = crypto.randomUUID();
       f.id = terraId;
       f.properties = { ...f.properties, mode };

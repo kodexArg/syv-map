@@ -21,6 +21,13 @@
     "defaultVisible": true
   },
   {
+    "id": "area-1783487168644",
+    "label": "Santa Sede",
+    "path": "/polygons/area-1783487168644.geojson",
+    "color": "#f2ff42",
+    "defaultVisible": true
+  },
+  {
     "id": "barrio-de-la-armada",
     "label": "Barrio de la Armada",
     "path": "/polygons/barrio-de-la-armada.geojson",
@@ -31,7 +38,7 @@
     "id": "barrio-de-pescadores",
     "label": "Barrio de Pescadores",
     "path": "/polygons/barrio-de-pescadores.geojson",
-    "color": "#7a591f",
+    "color": "#32287b",
     "defaultVisible": true
   },
   {

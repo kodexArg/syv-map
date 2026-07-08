@@ -63,6 +63,15 @@ function plain<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
 
+// Terra Draw rejects features whose coordinates carry >9 decimals ("excessive
+// precision") — boolean ops / snapping can yield 14+. Clamp all geometry to 8
+// decimals (~1 mm) so every shape stays editable. Recurses any nesting depth.
+export function roundCoords(coords: any): any {
+  return typeof coords[0] === 'number'
+    ? [Math.round(coords[0] * 1e8) / 1e8, Math.round(coords[1] * 1e8) / 1e8]
+    : coords.map(roundCoords);
+}
+
 // Persist the whole state to the durable layer (localStorage). Synchronous and
 // can't fail on the network — this is what makes edits survive between sessions
 // regardless of whether the disk API is reachable. Call after every mutation.
@@ -115,7 +124,7 @@ export async function createArea(geometry: any): Promise<Layer> {
       {
         type: 'Feature',
         properties: { name: label, color, fill: true, fillOpacity: 0.3, weight: 3 },
-        geometry: plain(geometry),
+        geometry: { ...plain(geometry), coordinates: roundCoords(plain(geometry).coordinates) },
       },
     ],
   };
@@ -161,7 +170,10 @@ export async function setGeometries(
   const l = find(id);
   if (!l?.data?.features) return;
   for (const { index, geometry } of geoms) {
-    if (l.data.features[index]) l.data.features[index].geometry = plain(geometry);
+    if (!l.data.features[index]) continue;
+    const g = plain(geometry);
+    g.coordinates = roundCoords(g.coordinates);
+    l.data.features[index].geometry = g;
   }
   await persist(l);
 }
