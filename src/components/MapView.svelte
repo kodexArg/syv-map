@@ -2,7 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import maplibregl from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode } from 'terra-draw';
+  import {
+    TerraDraw,
+    TerraDrawPolygonMode,
+    TerraDrawLineStringMode,
+    TerraDrawSelectMode,
+  } from 'terra-draw';
   import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
   import type { Layer } from '../lib/types';
   import {
@@ -11,10 +16,14 @@
     createArea,
     renameLayer,
     recolorLayer,
-    setGeometry,
+    setGeometries,
     toggleVisible,
     removeLayer,
-    isEditableArea,
+    reorderLayer,
+    resetToCanon,
+    isEditable,
+    isEmpty,
+    hasArea,
   } from '../lib/mapStore.svelte';
 
   let mapContainer: HTMLDivElement;
@@ -25,6 +34,8 @@
   // ui session state: 'idle' | 'create' | 'edit'
   let uiMode = $state<'idle' | 'create' | 'edit'>('idle');
   let editingId = $state<string | null>(null);
+  // maps each Terra Draw feature back to its original index in the layer
+  let editFeatureIds: { origIndex: number; terraId: string }[] = [];
 
   const rendered = new Set<string>();
   const srcId = (id: string) => `src-${id}`;
@@ -42,17 +53,38 @@
 
     for (const layer of store.layers) {
       live.add(layer.id);
+      const area = hasArea(layer);
+
       if (!map.getSource(srcId(layer.id))) {
         map.addSource(srcId(layer.id), { type: 'geojson', data: snapshot(layer.data) });
-        map.addLayer({
-          id: fillId(layer.id),
-          type: 'fill',
-          source: srcId(layer.id),
-          paint: {
-            'fill-color': ['coalesce', ['get', 'color'], '#ff8c42'],
-            'fill-opacity': ['coalesce', ['get', 'fillOpacity'], 0.3],
+        rendered.add(layer.id);
+      } else {
+        (map.getSource(srcId(layer.id)) as maplibregl.GeoJSONSource).setData(snapshot(layer.data));
+      }
+
+      // fill = the área. Only regions that enclose territory get one; an
+      // open-line región (la Muralla) delimits without an interior, so it
+      // renders as border only. Reconcile presence both ways.
+      if (area && !map.getLayer(fillId(layer.id))) {
+        const before = map.getLayer(lineId(layer.id)) ? lineId(layer.id) : undefined;
+        map.addLayer(
+          {
+            id: fillId(layer.id),
+            type: 'fill',
+            source: srcId(layer.id),
+            paint: {
+              'fill-color': ['coalesce', ['get', 'color'], '#ff8c42'],
+              'fill-opacity': ['coalesce', ['get', 'fillOpacity'], 0.3],
+            },
           },
-        });
+          before,
+        );
+      } else if (!area && map.getLayer(fillId(layer.id))) {
+        map.removeLayer(fillId(layer.id));
+      }
+
+      // border/trazo: every región has one (polygon outline or open line).
+      if (!map.getLayer(lineId(layer.id))) {
         map.addLayer({
           id: lineId(layer.id),
           type: 'line',
@@ -62,10 +94,8 @@
             'line-width': ['coalesce', ['get', 'weight'], 2],
           },
         });
-        rendered.add(layer.id);
-      } else {
-        (map.getSource(srcId(layer.id)) as maplibregl.GeoJSONSource).setData(snapshot(layer.data));
       }
+
       const vis = layer.visible ? 'visible' : 'none';
       if (map.getLayer(fillId(layer.id))) map.setLayoutProperty(fillId(layer.id), 'visibility', vis);
       if (map.getLayer(lineId(layer.id))) map.setLayoutProperty(lineId(layer.id), 'visibility', vis);
@@ -77,6 +107,15 @@
       if (map.getLayer(lineId(id))) map.removeLayer(lineId(id));
       if (map.getSource(srcId(id))) map.removeSource(srcId(id));
       rendered.delete(id);
+    }
+
+    // Enforce stack order: top of the panel list = top of the map. Walk the
+    // list bottom→top, raising each layer's fill then line to the top, so the
+    // first entry ends up on top and the border stays above its own fill.
+    for (let i = store.layers.length - 1; i >= 0; i--) {
+      const id = store.layers[i].id;
+      if (map.getLayer(fillId(id))) map.moveLayer(fillId(id));
+      if (map.getLayer(lineId(id))) map.moveLayer(lineId(id));
     }
   }
 
@@ -95,21 +134,40 @@
   }
 
   function beginEdit(layer: Layer) {
-    if (!draw || uiMode !== 'idle' || !isEditableArea(layer)) return;
+    if (!draw || uiMode !== 'idle' || !isEditable(layer)) return;
     uiMode = 'edit';
     editingId = layer.id;
     draw.start();
     draw.setMode('select');
-    const f = snapshot(layer.data.features[0]);
-    f.id = crypto.randomUUID();
-    f.properties = { ...f.properties, mode: 'polygon' };
-    draw.addFeatures([f]);
+
+    // load every editable feature (polygon or open line), tagging each with the
+    // Terra Draw mode that matches its geometry, and remember its original index.
+    editFeatureIds = [];
+    const feats: any[] = [];
+    const src = layer.data.features ?? [];
+    for (let i = 0; i < src.length; i++) {
+      const t = src[i]?.geometry?.type;
+      const mode = t === 'Polygon' ? 'polygon' : t === 'LineString' ? 'linestring' : null;
+      if (!mode) continue;
+      const f = snapshot(src[i]);
+      const terraId = crypto.randomUUID();
+      f.id = terraId;
+      f.properties = { ...f.properties, mode };
+      feats.push(f);
+      editFeatureIds.push({ origIndex: i, terraId });
+    }
+    draw.addFeatures(feats);
   }
 
   function saveEdit() {
     if (!draw || uiMode !== 'edit' || !editingId) return;
-    const poly = draw.getSnapshot().find((f: any) => f.geometry?.type === 'Polygon');
-    if (poly) setGeometry(editingId, poly.geometry);
+    const snap = draw.getSnapshot();
+    const geoms: { index: number; geometry: any }[] = [];
+    for (const { origIndex, terraId } of editFeatureIds) {
+      const f = snap.find((x: any) => x.id === terraId);
+      if (f?.geometry) geoms.push({ index: origIndex, geometry: f.geometry });
+    }
+    if (geoms.length) setGeometries(editingId, geoms);
     endSession();
   }
 
@@ -124,6 +182,7 @@
     }
     uiMode = 'idle';
     editingId = null;
+    editFeatureIds = [];
   }
 
   // --- row actions -----------------------------------------------------------
@@ -135,28 +194,39 @@
     recolorLayer(layer.id, (e.target as HTMLInputElement).value);
   }
   function doDelete(layer: Layer) {
-    if (window.confirm(`¿Eliminar "${layer.label}"?`)) removeLayer(layer.id);
+    // an empty (undrawn) area is a throwaway placeholder — remove it with no ceremony
+    if (isEmpty(layer) || window.confirm(`¿Eliminar "${layer.label}"?`)) removeLayer(layer.id);
+  }
+  function doReset() {
+    if (window.confirm('¿Descartar tus ediciones locales y volver al mapa original?')) resetToCanon();
   }
 
   onMount(async () => {
     map = new maplibregl.Map({
       container: mapContainer,
+      // CartoDB Positron "no labels" — light gray streets, zero place/street text.
       style: {
         version: 8,
         sources: {
           carto: {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+              'https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+              'https://b.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+              'https://c.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
             ],
             tileSize: 256,
             attribution:
               '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributments">CARTO</a>',
           },
         },
-        layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+        layers: [
+          // warm cream floor under the tiles; the raster is drawn semi-opaque
+          // over it so the stark white Positron basemap reads softer, less
+          // contrasty — a creamy tint instead of blinding white.
+          { id: 'bg', type: 'background', paint: { 'background-color': '#efe4c4' } },
+          { id: 'carto', type: 'raster', source: 'carto', paint: { 'raster-opacity': 0.62 } },
+        ],
       },
       center: [-58.376, -34.605],
       zoom: 14,
@@ -168,9 +238,16 @@
       adapter: new TerraDrawMapLibreGLAdapter({ map, maplibregl }),
       modes: [
         new TerraDrawPolygonMode(),
+        new TerraDrawLineStringMode(),
         new TerraDrawSelectMode({
           flags: {
             polygon: {
+              feature: {
+                draggable: true,
+                coordinates: { midpoints: true, draggable: true, deletable: true },
+              },
+            },
+            linestring: {
               feature: {
                 draggable: true,
                 coordinates: { midpoints: true, draggable: true, deletable: true },
@@ -206,16 +283,19 @@
     class="absolute top-4 left-4 z-10 w-72 rounded-(--radius-lg) border border-border bg-card/95 p-4 shadow-lg backdrop-blur-sm"
   >
     <h1 class="mb-1 text-sm font-extrabold text-foreground">syv-map</h1>
-    <p class="mb-3 text-xs font-mono text-muted-foreground">Áreas · regiones</p>
-
-    {#if uiMode === 'idle'}
+    <div class="mb-3 flex items-center justify-between">
+      <p class="text-xs font-mono text-muted-foreground">
+        {store.savedAt ? 'Guardado ✓' : 'Áreas · regiones'}
+      </p>
       <button
-        onclick={beginCreate}
-        class="mb-3 w-full rounded-md border border-primary/60 bg-primary/10 px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-primary/20"
-      >
-        ＋ Nueva área
-      </button>
-    {:else if uiMode === 'create'}
+        onclick={doReset}
+        title="Descartar ediciones locales y volver al mapa original"
+        disabled={uiMode !== 'idle'}
+        class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30"
+      >↺ Restaurar</button>
+    </div>
+
+    {#if uiMode === 'create'}
       <div class="mb-3 rounded-md border border-primary/60 bg-primary/10 p-2">
         <p class="mb-2 text-xs text-foreground">Dibujá el área. Clic por cada vértice, doble clic para cerrar.</p>
         <button onclick={cancelSession} class="w-full rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40">Cancelar</button>
@@ -231,7 +311,7 @@
     {/if}
 
     <ul class="space-y-1.5">
-      {#each store.layers as layer (layer.id)}
+      {#each store.layers as layer, i (layer.id)}
         <li class="group flex items-center gap-2 rounded px-1 py-0.5 hover:bg-muted/30">
           <input
             type="checkbox"
@@ -249,16 +329,31 @@
               disabled={uiMode !== 'idle'}
             />
           </label>
-          <span class="flex-1 truncate text-sm text-foreground">{layer.label}</span>
-          <span class="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+          <span class="flex-1 truncate text-sm {isEmpty(layer) ? 'italic text-muted-foreground' : 'text-foreground'}">
+            {layer.label}{#if isEmpty(layer)}<span class="ml-1 text-[10px] not-italic text-muted-foreground/60">· vacía</span>{/if}
+          </span>
+          <span class="flex items-center gap-1 {isEmpty(layer) ? '' : 'opacity-0 group-hover:opacity-100'}">
+            <button title="Subir" onclick={() => reorderLayer(layer.id, -1)} disabled={uiMode !== 'idle' || i === 0} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">▲</button>
+            <button title="Bajar" onclick={() => reorderLayer(layer.id, 1)} disabled={uiMode !== 'idle' || i === store.layers.length - 1} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">▼</button>
             <button title="Renombrar" onclick={() => doRename(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">✎</button>
-            {#if isEditableArea(layer)}
+            {#if isEditable(layer)}
               <button title="Editar forma" onclick={() => beginEdit(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">⬡</button>
             {/if}
-            <button title="Eliminar" onclick={() => doDelete(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-red-400 disabled:opacity-30">🗑</button>
+            <button title={isEmpty(layer) ? 'Eliminar (vacía)' : 'Eliminar'} onclick={() => doDelete(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-red-400 disabled:opacity-30">🗑</button>
           </span>
         </li>
       {/each}
+
+      {#if uiMode === 'idle'}
+        <li>
+          <button
+            onclick={beginCreate}
+            class="w-full rounded border border-dashed border-border/70 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+          >
+            ＋ nueva área…
+          </button>
+        </li>
+      {/if}
     </ul>
   </aside>
 </div>

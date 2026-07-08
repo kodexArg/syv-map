@@ -1,9 +1,16 @@
 [
   {
+    "id": "muralla",
+    "label": "Muralla",
+    "path": "/polygons/muralla.geojson",
+    "color": "DarkBlue",
+    "defaultVisible": true
+  },
+  {
     "id": "centro",
     "label": "Centro",
     "path": "/polygons/centro.geojson",
-    "color": "Yellow",
+    "color": "#FF6A1A",
     "defaultVisible": true
   },
   {
@@ -14,52 +21,38 @@
     "defaultVisible": true
   },
   {
-    "id": "isla-oriental",
-    "label": "Isla Oriental (Iglesia)",
-    "path": "/polygons/isla-oriental.geojson",
-    "color": "White",
-    "defaultVisible": true
-  },
-  {
     "id": "barrio-de-la-armada",
     "label": "Barrio de la Armada",
     "path": "/polygons/barrio-de-la-armada.geojson",
-    "color": "Salmon",
+    "color": "#71f9ac",
     "defaultVisible": true
   },
   {
     "id": "barrio-de-pescadores",
     "label": "Barrio de Pescadores",
     "path": "/polygons/barrio-de-pescadores.geojson",
-    "color": "DimGray",
+    "color": "#7a591f",
     "defaultVisible": true
   },
   {
     "id": "barrio-norte",
     "label": "Barrio Norte",
     "path": "/polygons/barrio-norte.geojson",
-    "color": "#ff8c42",
+    "color": "#74ACDF",
     "defaultVisible": true
   },
   {
-    "id": "barrios-del-muro",
-    "label": "Barrios del Muro",
-    "path": "/polygons/barrios-del-muro.geojson",
-    "color": "#ff8c42",
+    "id": "area-1783478988512",
+    "label": "Zona Roja",
+    "path": "/polygons/area-1783478988512.geojson",
+    "color": "#641b1b",
     "defaultVisible": true
   },
   {
-    "id": "barrios-del-muro-sur",
-    "label": "Barrios del Muro (Sur)",
-    "path": "/polygons/barrios-del-muro-sur.geojson",
-    "color": "#ff8c42",
-    "defaultVisible": true
-  },
-  {
-    "id": "muralla",
-    "label": "Muralla",
-    "path": "/polygons/muralla.geojson",
-    "color": "DarkBlue",
+    "id": "area-1783479651570",
+    "label": "Barrios Del Muro",
+    "path": "/polygons/area-1783479651570.geojson",
+    "color": "#080808",
     "defaultVisible": true
   }
 ]

@@ -50,6 +50,19 @@ export const POST: APIRoute = async ({ params, request }) => {
   return ok();
 };
 
+// Reorder the manifest to match a given id order. Addressed as `_order`
+// (a reserved id, not a real layer). Entries not listed keep their tail order.
+export const PUT: APIRoute = async ({ params, request }) => {
+  if (params.id !== '_order') return new Response('not found', { status: 404 });
+  const { ids } = await request.json();
+  const idx = await readIndex();
+  const byId = new Map(idx.map((e) => [e.id, e]));
+  const reordered = ids.map((id: string) => byId.get(id)).filter(Boolean);
+  for (const e of idx) if (!ids.includes(e.id)) reordered.push(e);
+  await writeIndex(reordered);
+  return ok();
+};
+
 export const DELETE: APIRoute = async ({ params }) => {
   const id = params.id!;
   await fs.rm(path.join(DIR, `${id}.geojson`), { force: true });
