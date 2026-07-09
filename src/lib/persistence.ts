@@ -53,7 +53,7 @@ export function clearLocal(): void {
 // --- shipped canon (read on first load / after a reset-to-canon) ------------
 
 export async function loadManifest(): Promise<LayerMeta[]> {
-  const res = await fetch('/polygons/index.json', { cache: 'no-store' });
+  const res = await fetch(API, { cache: 'no-store' });
   if (!res.ok) return [];
   return res.json();
 }
@@ -83,6 +83,22 @@ export async function deleteLayer(id: string): Promise<void> {
     await fetch(`${API}/${id}`, { method: 'DELETE' });
   } catch {
     /* best-effort */
+  }
+}
+
+// Bulk-mirror the durable localStorage snapshot into SQLite. Called on load
+// when a local snapshot exists: it makes the DB an exact copy of the state the
+// user sees, closing the localStorage↔canon divergence. Best-effort — if the
+// server is down, localStorage already holds everything.
+export async function syncAll(layers: Layer[]): Promise<void> {
+  try {
+    await fetch(API, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(layers),
+    });
+  } catch {
+    /* offline / static — DB is a mirror; localStorage is the durable original */
   }
 }
 

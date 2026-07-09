@@ -12,6 +12,7 @@ import {
   loadLocal,
   saveLocal,
   clearLocal,
+  syncAll,
 } from './persistence';
 
 export const store = $state<{ layers: Layer[]; ready: boolean; savedAt: number | null }>({
@@ -30,6 +31,9 @@ export async function loadLayers(): Promise<void> {
     store.layers = local;
     store.ready = true;
     store.savedAt = Date.now(); // state came from the durable snapshot
+    // Mirror the live snapshot into SQLite so the DB reflects exactly what the
+    // user sees (best-effort; localStorage remains the durable original).
+    void syncAll(plain(local));
     return;
   }
 
@@ -175,6 +179,40 @@ export async function setGeometries(
     g.coordinates = roundCoords(g.coordinates);
     l.data.features[index].geometry = g;
   }
+  await persist(l);
+}
+
+// Abrir una región cerrada en un vértice para que pase a ser un MURO. Corta el
+// anillo del polígono en el vértice `vertexIndex`: ese vértice queda como un
+// extremo de la línea y la arista de cierre que llegaba a él se vuelve la
+// abertura (el «portón»). La geometría pasa de Polygon a LineString, con lo cual
+// hasArea() da falso y la región se dibuja SÓLO como borde — un muro con un hueco
+// donde se lo abrió. (PRD «El caso del Muro»: Región no implica polígono cerrado.)
+// Nota: usa el anillo exterior; descarta agujeros/islas (un muro no tiene interior).
+export async function openAsWall(
+  id: string,
+  featureIndex: number,
+  vertexIndex: number,
+): Promise<void> {
+  const l = find(id);
+  const f = l?.data?.features?.[featureIndex];
+  const g = f?.geometry;
+  const ring: number[][] | undefined =
+    g?.type === 'Polygon' ? g.coordinates?.[0] : g?.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : undefined;
+  if (!l || !f || !ring || ring.length < 4) return;
+
+  // distinct vertices — drop the closing duplicate if the ring is explicitly closed
+  const n = ring.length;
+  const closed = ring[0][0] === ring[n - 1][0] && ring[0][1] === ring[n - 1][1];
+  const v = closed ? ring.slice(0, -1) : ring.slice();
+  const m = v.length;
+  const k = ((vertexIndex % m) + m) % m;
+
+  // rotate so the cut vertex is the first endpoint; leave it OPEN (no return to
+  // start) — the gate is the original edge v[k-1] → v[k].
+  const line = v.slice(k).concat(v.slice(0, k));
+  f.geometry = { type: 'LineString', coordinates: roundCoords(line) };
+  f.properties = { ...f.properties, fill: false };
   await persist(l);
 }
 

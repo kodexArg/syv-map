@@ -1,23 +1,16 @@
 [
   {
-    "id": "muralla",
-    "label": "Muralla",
-    "path": "/polygons/muralla.geojson",
-    "color": "DarkBlue",
+    "id": "area-1783491220752",
+    "label": "ZDM",
+    "path": "/polygons/area-1783491220752.geojson",
+    "color": "#e8e0bb",
     "defaultVisible": true
   },
   {
-    "id": "centro",
-    "label": "Centro",
-    "path": "/polygons/centro.geojson",
-    "color": "#FF6A1A",
-    "defaultVisible": true
-  },
-  {
-    "id": "zona-militar-norte",
-    "label": "Zona Militar Norte",
-    "path": "/polygons/zona-militar-norte.geojson",
-    "color": "ForestGreen",
+    "id": "area-1783490935050",
+    "label": "Lago Muerto",
+    "path": "/polygons/area-1783490935050.geojson",
+    "color": "#6242ff",
     "defaultVisible": true
   },
   {
@@ -26,61 +19,5 @@
     "path": "/polygons/area-1783487168644.geojson",
     "color": "#f2ff42",
     "defaultVisible": true
-  },
-  {
-    "id": "barrio-de-la-armada",
-    "label": "Barrio de la Armada",
-    "path": "/polygons/barrio-de-la-armada.geojson",
-    "color": "#71f9ac",
-    "defaultVisible": true
-  },
-  {
-    "id": "barrio-de-pescadores",
-    "label": "Barrio de Pescadores",
-    "path": "/polygons/barrio-de-pescadores.geojson",
-    "color": "#32287b",
-    "defaultVisible": true
-  },
-  {
-    "id": "barrio-norte",
-    "label": "Barrio Norte",
-    "path": "/polygons/barrio-norte.geojson",
-    "color": "#74ACDF",
-    "defaultVisible": true
-  },
-  {
-    "id": "area-1783478988512",
-    "label": "Zona Roja",
-    "path": "/polygons/area-1783478988512.geojson",
-    "color": "#641b1b",
-    "defaultVisible": true
-  },
-  {
-    "id": "area-1783479651570",
-    "label": "Barrios Del Muro",
-    "path": "/polygons/area-1783479651570.geojson",
-    "color": "#080808",
-    "defaultVisible": true
-  },
-  {
-    "id": "area-1783489869362",
-    "label": "El Pantano",
-    "path": "/polygons/area-1783489869362.geojson",
-    "color": "#dafbeb",
-    "defaultVisible": false
-  },
-  {
-    "id": "area-1783490935050",
-    "label": "Lago Muerto",
-    "path": "/polygons/area-1783490935050.geojson",
-    "color": "#42f2ff",
-    "defaultVisible": false
-  },
-  {
-    "id": "area-1783491220752",
-    "label": "ZDM",
-    "path": "/polygons/area-1783491220752.geojson",
-    "color": "#bbe8be",
-    "defaultVisible": false
   }
 ]

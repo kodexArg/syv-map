@@ -17,6 +17,7 @@
     renameLayer,
     recolorLayer,
     setGeometries,
+    openAsWall,
     toggleVisible,
     removeLayer,
     reorderLayer,
@@ -32,9 +33,11 @@
   let draw: TerraDraw | undefined;
   let mapLoaded = $state(false);
 
-  // ui session state: 'idle' | 'create' | 'edit'
-  let uiMode = $state<'idle' | 'create' | 'edit'>('idle');
+  // ui session state: 'idle' | 'create' | 'edit' | 'open'
+  let uiMode = $state<'idle' | 'create' | 'edit' | 'open'>('idle');
   let editingId = $state<string | null>(null);
+  // región whose border is being opened into a muro (uiMode === 'open')
+  let openingId = $state<string | null>(null);
   // maps each Terra Draw feature back to its original index in the layer
   let editFeatureIds: { origIndex: number; terraId: string }[] = [];
 
@@ -42,6 +45,9 @@
   const srcId = (id: string) => `src-${id}`;
   const fillId = (id: string) => `fill-${id}`;
   const lineId = (id: string) => `line-${id}`;
+  // overlay que muestra los vértices mientras se abre una región en un muro
+  const OPEN_VTX_SRC = 'open-vtx';
+  const OPEN_VTX_LAYER = 'open-vtx-dots';
 
   function snapshot(v: any) {
     return JSON.parse(JSON.stringify(v));
@@ -285,6 +291,100 @@
     editFeatureIds = [];
   }
 
+  // --- abrir región → muro ---------------------------------------------------
+  // Enter "open" mode for a closed región: the next click on a vertex cuts the
+  // ring there and the área becomes an open-line muro. Terra Draw stays off; we
+  // use a raw MapLibre click + nearest-vertex hit test (in pixels).
+  function beginOpen(layer: Layer) {
+    if (uiMode !== 'idle' || !hasArea(layer)) return;
+    uiMode = 'open';
+    openingId = layer.id;
+    if (map) map.getCanvas().style.cursor = 'crosshair';
+    showOpenVertices(layer);
+  }
+
+  function endOpenSession() {
+    uiMode = 'idle';
+    openingId = null;
+    if (map) map.getCanvas().style.cursor = '';
+    hideOpenVertices();
+  }
+
+  // draw every outer-ring vertex of the opening región as a clickable dot, so
+  // the user can see exactly where the ring can be cut. Same vertex set the
+  // hit test uses, so what you see is what you can click.
+  function showOpenVertices(layer: Layer) {
+    if (!map) return;
+    const feats: any[] = [];
+    for (const f of layer.data.features ?? []) {
+      const g = f?.geometry;
+      const ring: number[][] | undefined =
+        g?.type === 'Polygon' ? g.coordinates?.[0] : g?.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : undefined;
+      if (!ring || ring.length < 4) continue;
+      const n = ring.length;
+      const closed = ring[0][0] === ring[n - 1][0] && ring[0][1] === ring[n - 1][1];
+      const v = closed ? ring.slice(0, -1) : ring;
+      for (const c of v) feats.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [c[0], c[1]] } });
+    }
+    const data = { type: 'FeatureCollection', features: feats };
+    if (!map.getSource(OPEN_VTX_SRC)) {
+      map.addSource(OPEN_VTX_SRC, { type: 'geojson', data } as any);
+    } else {
+      (map.getSource(OPEN_VTX_SRC) as maplibregl.GeoJSONSource).setData(data as any);
+    }
+    if (!map.getLayer(OPEN_VTX_LAYER)) {
+      map.addLayer({
+        id: OPEN_VTX_LAYER,
+        type: 'circle',
+        source: OPEN_VTX_SRC,
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#ff8c42',
+          'circle-stroke-color': '#0d0d0d',
+          'circle-stroke-width': 2,
+        },
+      });
+    } else {
+      map.setLayoutProperty(OPEN_VTX_LAYER, 'visibility', 'visible');
+    }
+    map.moveLayer(OPEN_VTX_LAYER); // always on top of the regions
+  }
+
+  function hideOpenVertices() {
+    if (!map) return;
+    if (map.getLayer(OPEN_VTX_LAYER)) map.setLayoutProperty(OPEN_VTX_LAYER, 'visibility', 'none');
+    if (map.getSource(OPEN_VTX_SRC))
+      (map.getSource(OPEN_VTX_SRC) as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+  }
+
+  // find the polygon vertex of the opening layer nearest to the click (≤ 18px)
+  // and open the ring there; otherwise ignore the click and stay in the mode.
+  function onOpenClick(e: maplibregl.MapMouseEvent) {
+    if (uiMode !== 'open' || !openingId || !map) return;
+    const layer = store.layers.find((l) => l.id === openingId);
+    if (!layer) return;
+    const feats = layer.data.features ?? [];
+    let best = { d: Infinity, fi: -1, vi: -1 };
+    for (let fi = 0; fi < feats.length; fi++) {
+      const g = feats[fi]?.geometry;
+      const ring: number[][] | undefined =
+        g?.type === 'Polygon' ? g.coordinates?.[0] : g?.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : undefined;
+      if (!ring || ring.length < 4) continue;
+      const n = ring.length;
+      const closed = ring[0][0] === ring[n - 1][0] && ring[0][1] === ring[n - 1][1];
+      const v = closed ? ring.slice(0, -1) : ring;
+      for (let vi = 0; vi < v.length; vi++) {
+        const p = map.project([v[vi][0], v[vi][1]] as [number, number]);
+        const d = Math.hypot(p.x - e.point.x, p.y - e.point.y);
+        if (d < best.d) best = { d, fi, vi };
+      }
+    }
+    if (best.fi < 0 || best.d > 18) return; // missed every vertex — keep waiting
+    const id = openingId;
+    endOpenSession();
+    openAsWall(id, best.fi, best.vi).then(() => syncMap());
+  }
+
   // --- row actions -----------------------------------------------------------
   function doRename(layer: Layer) {
     const name = window.prompt('Nombre del área', layer.label);
@@ -333,6 +433,7 @@
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    map.on('click', onOpenClick);
 
     draw = new TerraDraw({
       adapter: new TerraDrawMapLibreGLAdapter({ map, maplibregl }),
@@ -410,6 +511,11 @@
           <button onclick={cancelSession} class="flex-1 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40">Cancelar</button>
         </div>
       </div>
+    {:else if uiMode === 'open'}
+      <div class="mb-3 rounded-md border border-primary/60 bg-primary/10 p-2">
+        <p class="mb-2 text-xs text-foreground">Hacé clic en un vértice del polígono para <strong>abrir el muro</strong> ahí. La zona pierde el relleno y pasa a ser un muro (línea), con la abertura en ese punto.</p>
+        <button onclick={endOpenSession} class="w-full rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted/40">Cancelar</button>
+      </div>
     {/if}
 
     <ul class="space-y-1.5">
@@ -440,6 +546,9 @@
             <button title="Renombrar" onclick={() => doRename(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">✎</button>
             {#if isEditable(layer)}
               <button title="Editar forma" onclick={() => beginEdit(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">⬡</button>
+            {/if}
+            {#if hasArea(layer)}
+              <button title="Abrir en un vértice → muro" onclick={() => beginOpen(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">✂</button>
             {/if}
             <button title={isEmpty(layer) ? 'Eliminar (vacía)' : 'Eliminar'} onclick={() => doDelete(layer)} disabled={uiMode !== 'idle'} class="text-xs text-muted-foreground hover:text-red-400 disabled:opacity-30">🗑</button>
           </span>

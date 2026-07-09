@@ -1,0 +1,42 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Barrio Norte",
+        "color": "#4258ff",
+        "fill": true,
+        "fillOpacity": 0.3,
+        "weight": 3
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -58.37551773,
+              -34.59617599
+            ],
+            [
+              -58.3821298,
+              -34.59671075
+            ],
+            [
+              -58.38173985,
+              -34.6036971
+            ],
+            [
+              -58.37519441,
+              -34.60334145
+            ],
+            [
+              -58.37551773,
+              -34.59617599
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

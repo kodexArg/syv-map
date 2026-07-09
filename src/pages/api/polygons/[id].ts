@@ -1,71 +1,49 @@
-// Dev-only persistence endpoint (OPTION B). Writes each layer's GeoJSON to
-// public/polygons/<id>.geojson and keeps public/polygons/index.json (the
-// manifest) in sync. Runs under `bun dev`; not meant for the static build.
+// Per-layer endpoint for the SQLite-backed store (bun:sqlite, dev/bun runtime).
+//   GET    /api/polygons/<id>     → that layer's GeoJSON FeatureCollection
+//   POST   /api/polygons/<id>     → upsert { meta, data }
+//   DELETE /api/polygons/<id>     → delete the layer
+//   PUT    /api/polygons/_order   → persist stack order { ids: [...] }
+//
+// Replaces the previous filesystem backend (public/polygons/*.geojson + index.json).
+// The canon on disk is now just the seed source; the DB is the source of truth.
 
 import type { APIRoute } from 'astro';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { getData, upsert, remove, setOrder } from '../../../lib/db';
 
 export const prerender = false;
 
-const DIR = path.join(process.cwd(), 'public', 'polygons');
-const INDEX = path.join(DIR, 'index.json');
-
-async function readIndex(): Promise<any[]> {
-  try {
-    return JSON.parse(await fs.readFile(INDEX, 'utf-8'));
-  } catch {
-    return [];
-  }
-}
-
-async function writeIndex(idx: any[]): Promise<void> {
-  await fs.writeFile(INDEX, JSON.stringify(idx, null, 2));
-}
-
 const ok = () =>
-  new Response(JSON.stringify({ ok: true }), {
-    headers: { 'content-type': 'application/json' },
-  });
+  new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
+
+export const GET: APIRoute = ({ params }) => {
+  const data = getData(params.id!);
+  if (!data) return new Response('not found', { status: 404 });
+  return new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
+};
 
 export const POST: APIRoute = async ({ params, request }) => {
-  const id = params.id!;
   const { meta, data } = await request.json();
-
-  await fs.writeFile(path.join(DIR, `${id}.geojson`), JSON.stringify(data, null, 2));
-
-  const idx = await readIndex();
-  const entry = {
-    id: meta.id,
-    label: meta.label,
-    path: meta.path,
-    color: meta.color,
-    defaultVisible: meta.defaultVisible,
-  };
-  const i = idx.findIndex((e) => e.id === id);
-  if (i >= 0) idx[i] = entry;
-  else idx.push(entry);
-  await writeIndex(idx);
-
+  upsert(
+    {
+      id: params.id!,
+      label: meta.label,
+      color: meta.color,
+      defaultVisible: meta.defaultVisible ?? true,
+    },
+    data,
+  );
   return ok();
 };
 
-// Reorder the manifest to match a given id order. Addressed as `_order`
-// (a reserved id, not a real layer). Entries not listed keep their tail order.
+// Reorder the whole stack. Addressed as the reserved id `_order` (not a layer).
 export const PUT: APIRoute = async ({ params, request }) => {
   if (params.id !== '_order') return new Response('not found', { status: 404 });
   const { ids } = await request.json();
-  const idx = await readIndex();
-  const byId = new Map(idx.map((e) => [e.id, e]));
-  const reordered = ids.map((id: string) => byId.get(id)).filter(Boolean);
-  for (const e of idx) if (!ids.includes(e.id)) reordered.push(e);
-  await writeIndex(reordered);
+  setOrder(ids);
   return ok();
 };
 
-export const DELETE: APIRoute = async ({ params }) => {
-  const id = params.id!;
-  await fs.rm(path.join(DIR, `${id}.geojson`), { force: true });
-  await writeIndex((await readIndex()).filter((e) => e.id !== id));
+export const DELETE: APIRoute = ({ params }) => {
+  remove(params.id!);
   return ok();
 };
