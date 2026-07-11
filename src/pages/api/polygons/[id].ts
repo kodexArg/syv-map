@@ -1,19 +1,19 @@
-// Per-layer endpoint for the SQLite-backed store (bun:sqlite, dev/bun runtime).
+// Per-layer endpoint for the SQLite-backed store.
 //   GET    /api/polygons/<id>     → that layer's GeoJSON FeatureCollection
 //   POST   /api/polygons/<id>     → upsert { meta, data }
 //   DELETE /api/polygons/<id>     → delete the layer
 //   PUT    /api/polygons/_order   → persist stack order { ids: [...] }
+//   POST   /api/polygons/_seed    → wipe DB and re-import public/polygons/*.geojson
 //
-// Replaces the previous filesystem backend (public/polygons/*.geojson + index.json).
-// The canon on disk is now just the seed source; the DB is the source of truth.
+// public/polygons is seed-only; SQLite (db/syv-map.db) is the only runtime store.
 
 import type { APIRoute } from 'astro';
-import { getData, upsert, remove, setOrder } from '../../../lib/db';
+import { getData, upsert, remove, setOrder, seedFromDisk } from '../../../lib/db';
 
 export const prerender = false;
 
-const ok = () =>
-  new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
+const ok = (body: Record<string, unknown> = { ok: true }) =>
+  new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 
 export const GET: APIRoute = ({ params }) => {
   const data = getData(params.id!);
@@ -22,6 +22,12 @@ export const GET: APIRoute = ({ params }) => {
 };
 
 export const POST: APIRoute = async ({ params, request }) => {
+  // Reserved: re-seed from disk
+  if (params.id === '_seed') {
+    const count = seedFromDisk();
+    return ok({ ok: true, count });
+  }
+
   const { meta, data } = await request.json();
   upsert(
     {
@@ -44,6 +50,9 @@ export const PUT: APIRoute = async ({ params, request }) => {
 };
 
 export const DELETE: APIRoute = ({ params }) => {
+  if (params.id === '_seed' || params.id === '_order') {
+    return new Response('not found', { status: 404 });
+  }
   remove(params.id!);
   return ok();
 };

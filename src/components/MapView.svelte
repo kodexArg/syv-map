@@ -196,6 +196,16 @@
           paint: {
             'line-color': ['coalesce', ['get', 'color'], '#ff8c42'],
             'line-width': ['coalesce', ['get', 'weight'], 2],
+            // dotted/dashed via properties.lineStyle (default solid)
+            'line-dasharray': [
+              'match',
+              ['coalesce', ['get', 'lineStyle'], 'solid'],
+              'dotted',
+              ['literal', [0.8, 1.6]],
+              'dashed',
+              ['literal', [2, 2]],
+              ['literal', [1, 0]],
+            ],
           },
         });
       }
@@ -398,10 +408,22 @@
     if (isEmpty(layer) || window.confirm(`¿Eliminar "${layer.label}"?`)) removeLayer(layer.id);
   }
   function doReset() {
-    if (window.confirm('¿Descartar tus ediciones locales y volver al mapa original?')) resetToCanon();
+    if (
+      window.confirm(
+        '¿Reimportar public/polygons a SQLite y descartar el estado actual de la base?',
+      )
+    )
+      resetToCanon();
   }
 
   onMount(async () => {
+    // One-shot: drop legacy localStorage so it never shadows SQLite again.
+    try {
+      localStorage.removeItem('syv-map:layers:v1');
+    } catch {
+      /* ignore */
+    }
+
     map = new maplibregl.Map({
       container: mapContainer,
       // CartoDB Positron "no labels" — light gray streets, zero place/street text.
@@ -488,15 +510,20 @@
     <h1 class="mb-1 text-sm font-extrabold text-foreground">syv-map</h1>
     <div class="mb-3 flex items-center justify-between">
       <p class="text-xs font-mono text-muted-foreground">
-        {store.savedAt ? 'Guardado ✓' : 'Áreas · regiones'}
+        {store.savedAt ? 'SQLite ✓' : 'Áreas · regiones'}
       </p>
       <button
         onclick={doReset}
-        title="Descartar ediciones locales y volver al mapa original"
+        title="Reimportar public/polygons → SQLite"
         disabled={uiMode !== 'idle'}
         class="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30"
       >↺ Restaurar</button>
     </div>
+    {#if store.error}
+      <p class="mb-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-200">
+        {store.error}
+      </p>
+    {/if}
 
     {#if uiMode === 'create'}
       <div class="mb-3 rounded-md border border-primary/60 bg-primary/10 p-2">

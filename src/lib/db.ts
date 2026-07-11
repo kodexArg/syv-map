@@ -1,11 +1,13 @@
 // Server-only SQLite store for map layers. The Astro dev server runs on Node, so
 // this uses `better-sqlite3` (synchronous, native, Node ABI). This is the
-// CANONICAL persistence layer; the client's localStorage is a durable cache
-// layered on top of it. The schema is plain SQLite, so it ports to Cloudflare D1
-// later almost verbatim: swap the driver in `db()` — the SQL and row shapes stay.
+// ONLY persistence layer for the map UI. The schema is plain SQLite, so it ports
+// to Cloudflare D1 later almost verbatim: swap the driver in `db()` — the SQL
+// and row shapes stay.
+//
+// `public/polygons/*.geojson` is seed-only (import via seedFromDisk / seed-db.ts).
 
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { LayerMeta } from './types';
 
@@ -98,8 +100,7 @@ export function setOrder(ids: string[]): void {
   tx(ids);
 }
 
-// Replace the entire table with an ordered set. Used for seeding and for the
-// bulk sync that mirrors the client's durable localStorage snapshot into SQLite.
+// Replace the entire table with an ordered set. Used for seeding from disk.
 export function replaceAll(layers: SeedLayer[]): void {
   const d = db();
   const tx = d.transaction((list: SeedLayer[]) => {
@@ -112,4 +113,41 @@ export function replaceAll(layers: SeedLayer[]): void {
     );
   });
   tx(layers);
+}
+
+/** Load public/polygons/*.geojson (+ index.json order) into SQLite. Returns count. */
+export function seedFromDisk(): number {
+  const dir = path.join(process.cwd(), 'public', 'polygons');
+  if (!existsSync(dir)) return 0;
+
+  let order: string[] = [];
+  try {
+    const idx = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
+    if (Array.isArray(idx)) order = idx.map((e: { id?: string }) => e.id).filter(Boolean) as string[];
+  } catch {
+    /* no index — alphabetical */
+  }
+
+  const layers: SeedLayer[] = readdirSync(dir)
+    .filter((f) => f.endsWith('.geojson'))
+    .map((f) => {
+      const id = f.replace(/\.geojson$/, '');
+      const data = JSON.parse(readFileSync(path.join(dir, f), 'utf8'));
+      const props = data.features?.[0]?.properties ?? {};
+      return {
+        id,
+        label: props.name || id,
+        color: props.color || '#ff8c42',
+        defaultVisible: true,
+        data,
+      };
+    })
+    .sort((a, b) => {
+      const ra = order.indexOf(a.id);
+      const rb = order.indexOf(b.id);
+      return (ra === -1 ? 1e6 : ra) - (rb === -1 ? 1e6 : rb) || a.id.localeCompare(b.id);
+    });
+
+  replaceAll(layers);
+  return layers.length;
 }

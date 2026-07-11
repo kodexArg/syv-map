@@ -1,9 +1,72 @@
 [
   {
-    "id": "area-1783491220752",
-    "label": "ZDM",
-    "path": "/polygons/area-1783491220752.geojson",
-    "color": "#e8e0bb",
+    "id": "ruta-confederacion",
+    "label": "Ruta de la Confederación Argentina",
+    "path": "/polygons/ruta-confederacion.geojson",
+    "color": "#000000",
+    "defaultVisible": true
+  },
+  {
+    "id": "cordoba-ciudad-25m",
+    "label": "Córdoba (25 M)",
+    "path": "/polygons/cordoba-ciudad-25m.geojson",
+    "color": "#000000",
+    "defaultVisible": true
+  },
+  {
+    "id": "san-luis-ciudad",
+    "label": "San Luis",
+    "path": "/polygons/san-luis-ciudad.geojson",
+    "color": "#000000",
+    "defaultVisible": true
+  },
+  {
+    "id": "fuerte-san-martin",
+    "label": "Fuerte San Martín",
+    "path": "/polygons/fuerte-san-martin.geojson",
+    "color": "#000000",
+    "defaultVisible": true
+  },
+  {
+    "id": "mendoza-ciudad",
+    "label": "Mendoza",
+    "path": "/polygons/mendoza-ciudad.geojson",
+    "color": "#000000",
+    "defaultVisible": true
+  },
+  {
+    "id": "soja-cordoba-100m",
+    "label": "Soja confederal (100 M)",
+    "path": "/polygons/soja-cordoba-100m.geojson",
+    "color": "#c4a035",
+    "defaultVisible": true
+  },
+  {
+    "id": "ganado-mixto-100m",
+    "label": "Ganado mixto (pasto+corral)",
+    "path": "/polygons/ganado-mixto-100m.geojson",
+    "color": "#8b5a2b",
+    "defaultVisible": true
+  },
+  {
+    "id": "canamo-norte-cordoba",
+    "label": "Cáñamo (fibra 100 M)",
+    "path": "/polygons/canamo-norte-cordoba.geojson",
+    "color": "#3d7a3a",
+    "defaultVisible": true
+  },
+  {
+    "id": "area-1783487168644",
+    "label": "Santa Sede",
+    "path": "/polygons/area-1783487168644.geojson",
+    "color": "#f2ff42",
+    "defaultVisible": true
+  },
+  {
+    "id": "area-1783489869362",
+    "label": "El Pantano",
+    "path": "/polygons/area-1783489869362.geojson",
+    "color": "#dafbeb",
     "defaultVisible": true
   },
   {
@@ -14,10 +77,59 @@
     "defaultVisible": true
   },
   {
-    "id": "area-1783487168644",
-    "label": "Santa Sede",
-    "path": "/polygons/area-1783487168644.geojson",
-    "color": "#f2ff42",
+    "id": "area-1783491220752",
+    "label": "ZDM",
+    "path": "/polygons/area-1783491220752.geojson",
+    "color": "#e8e0bb",
+    "defaultVisible": true
+  },
+  {
+    "id": "area-1783524185869",
+    "label": "Muro",
+    "path": "/polygons/area-1783524185869.geojson",
+    "color": "#0d0d0d",
+    "defaultVisible": true
+  },
+  {
+    "id": "area-1783527478666",
+    "label": "Barrio Norte",
+    "path": "/polygons/area-1783527478666.geojson",
+    "color": "#4258ff",
+    "defaultVisible": true
+  },
+  {
+    "id": "area-1783527723059",
+    "label": "Barrios Del Muro",
+    "path": "/polygons/area-1783527723059.geojson",
+    "color": "#362c26",
+    "defaultVisible": true
+  },
+  {
+    "id": "barrio-de-la-armada",
+    "label": "Barrio de la Armada",
+    "path": "/polygons/barrio-de-la-armada.geojson",
+    "color": "#71f9ac",
+    "defaultVisible": true
+  },
+  {
+    "id": "barrio-de-pescadores",
+    "label": "Gremio de Pesca",
+    "path": "/polygons/barrio-de-pescadores.geojson",
+    "color": "#32287b",
+    "defaultVisible": true
+  },
+  {
+    "id": "centro",
+    "label": "Centro de Dársena",
+    "path": "/polygons/centro.geojson",
+    "color": "#FF6A1A",
+    "defaultVisible": true
+  },
+  {
+    "id": "zona-militar-norte",
+    "label": "Zona Militar",
+    "path": "/polygons/zona-militar-norte.geojson",
+    "color": "ForestGreen",
     "defaultVisible": true
   }
 ]

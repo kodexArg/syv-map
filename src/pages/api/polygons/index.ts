@@ -1,11 +1,8 @@
 // Collection endpoint for the SQLite-backed layer store.
 //   GET  /api/polygons        → the manifest (LayerMeta[], ordered)
-//   PUT  /api/polygons        → bulk sync: mirror the client's full snapshot in
+//   PUT  /api/polygons        → bulk replace (seed-db.ts / admin tools only)
 //
-// The bulk sync exists to end the localStorage↔disk divergence: the client's
-// durable localStorage snapshot IS the live state the user sees, so on load it
-// pushes that whole ordered set into SQLite. The DB becomes an exact mirror of
-// the browser instead of a stale seed.
+// The map UI does not use localStorage; it always loads from this GET.
 
 import type { APIRoute } from 'astro';
 import { listMeta, replaceAll, type SeedLayer } from '../../../lib/db';
@@ -31,7 +28,6 @@ export const PUT: APIRoute = async ({ request }) => {
       data: l.data,
     }));
 
-  // Never let a spurious empty snapshot wipe the canon.
   if (clean.length === 0) return json({ ok: true, count: 0, skipped: 'empty snapshot' });
 
   replaceAll(clean);

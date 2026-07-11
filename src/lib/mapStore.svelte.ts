@@ -1,6 +1,5 @@
-// Runtime layer store (Svelte 5 runes). This replaces the old static
-// `polygonLayers` array as the source of truth. The map and the panel both
-// read `store.layers`; every mutation also persists via the adapter.
+// Runtime layer store (Svelte 5 runes). Source of truth for the UI is this
+// in-memory store; durable persistence is SQLite only (via /api/polygons).
 
 import type { Layer } from './types';
 import {
@@ -9,51 +8,46 @@ import {
   saveLayer,
   deleteLayer,
   saveOrder,
-  loadLocal,
-  saveLocal,
-  clearLocal,
-  syncAll,
+  reseedFromDisk,
 } from './persistence';
 
-export const store = $state<{ layers: Layer[]; ready: boolean; savedAt: number | null }>({
+export const store = $state<{ layers: Layer[]; ready: boolean; savedAt: number | null; error: string | null }>({
   layers: [],
   ready: false,
   savedAt: null,
+  error: null,
 });
 
 // --- load ------------------------------------------------------------------
 
 export async function loadLayers(): Promise<void> {
-  // Durable state wins: if localStorage has a snapshot it already carries every
-  // edit (shapes, order, visibility, new/deleted layers) from prior sessions.
-  const local = loadLocal();
-  if (local) {
-    store.layers = local;
+  store.error = null;
+  try {
+    const metas = await loadManifest();
+    const layers: Layer[] = [];
+    for (const m of metas) {
+      const data = await fetchGeojson(m.path);
+      layers.push({ ...m, visible: m.defaultVisible, data });
+    }
+    store.layers = layers;
     store.ready = true;
-    store.savedAt = Date.now(); // state came from the durable snapshot
-    // Mirror the live snapshot into SQLite so the DB reflects exactly what the
-    // user sees (best-effort; localStorage remains the durable original).
-    void syncAll(plain(local));
-    return;
+    store.savedAt = Date.now();
+  } catch (e) {
+    store.ready = true;
+    store.error = e instanceof Error ? e.message : String(e);
+    store.layers = [];
   }
-
-  // First ever load (or after «Restaurar canon»): seed from the shipped files.
-  const metas = await loadManifest();
-  const layers: Layer[] = [];
-  for (const m of metas) {
-    const data = await fetchGeojson(m.path);
-    layers.push({ ...m, visible: m.defaultVisible, data });
-  }
-  store.layers = layers;
-  store.ready = true;
-  commit();
 }
 
-// Wipe the local snapshot and reload from the shipped canon on disk. The escape
-// hatch out of a stale local overlay (e.g. after pulling new canon).
+/** Re-seed SQLite from public/polygons, then reload. */
 export async function resetToCanon(): Promise<void> {
-  clearLocal();
-  await loadLayers();
+  store.error = null;
+  try {
+    await reseedFromDisk();
+    await loadLayers();
+  } catch (e) {
+    store.error = e instanceof Error ? e.message : String(e);
+  }
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -62,7 +56,6 @@ function find(id: string): Layer | undefined {
   return store.layers.find((l) => l.id === id);
 }
 
-// snapshot: strip Svelte proxies before handing GeoJSON to MapLibre / persistence
 function plain<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
@@ -76,17 +69,6 @@ export function roundCoords(coords: any): any {
     : coords.map(roundCoords);
 }
 
-// Persist the whole state to the durable layer (localStorage). Synchronous and
-// can't fail on the network — this is what makes edits survive between sessions
-// regardless of whether the disk API is reachable. Call after every mutation.
-function commit(): void {
-  saveLocal(plain(store.layers));
-  store.savedAt = Date.now();
-}
-
-// Any región whose features are polygons and/or open lines can have its shape
-// edited in Terra Draw. This covers filled areas AND open-line regions like la
-// Muralla (several LineStrings) — every element gets the vertex editor.
 export function isEditable(l: Layer): boolean {
   const f = l.data?.features;
   return (
@@ -95,18 +77,12 @@ export function isEditable(l: Layer): boolean {
   );
 }
 
-// A layer is empty when nothing has been drawn yet: no features, or no feature
-// carries any coordinate. Empty layers are placeholders — trivially deletable.
 export function isEmpty(l: Layer): boolean {
   const count = (a: any): number => (Array.isArray(a) ? a.reduce((n, x) => n + count(x), 0) : 1);
   const f = l.data?.features;
   return !Array.isArray(f) || f.length === 0 || !f.some((x) => count(x?.geometry?.coordinates ?? []) > 0);
 }
 
-// A región "has area" (a fill) only if it encloses territory — some feature is a
-// closed polygon. Open-line regions (a wall/frontier, e.g. la Muralla) delimit
-// but hold no interior: they render as border only, never as a filled area.
-// (PRD «El caso del Muro»: Región no implica polígono cerrado.)
 export function hasArea(l: Layer): boolean {
   const f = l.data?.features;
   return (
@@ -135,7 +111,7 @@ export async function createArea(geometry: any): Promise<Layer> {
   const layer: Layer = {
     id,
     label,
-    path: `/polygons/${id}.geojson`,
+    path: `/api/polygons/${id}`,
     color,
     defaultVisible: true,
     visible: true,
@@ -164,9 +140,6 @@ export async function recolorLayer(id: string, color: string): Promise<void> {
   await persist(l);
 }
 
-// Write back edited geometries by their original feature index. A single-area
-// región updates one feature; an open-line región (la Muralla) updates each of
-// its line features independently.
 export async function setGeometries(
   id: string,
   geoms: { index: number; geometry: any }[],
@@ -182,13 +155,6 @@ export async function setGeometries(
   await persist(l);
 }
 
-// Abrir una región cerrada en un vértice para que pase a ser un MURO. Corta el
-// anillo del polígono en el vértice `vertexIndex`: ese vértice queda como un
-// extremo de la línea y la arista de cierre que llegaba a él se vuelve la
-// abertura (el «portón»). La geometría pasa de Polygon a LineString, con lo cual
-// hasArea() da falso y la región se dibuja SÓLO como borde — un muro con un hueco
-// donde se lo abrió. (PRD «El caso del Muro»: Región no implica polígono cerrado.)
-// Nota: usa el anillo exterior; descarta agujeros/islas (un muro no tiene interior).
 export async function openAsWall(
   id: string,
   featureIndex: number,
@@ -201,23 +167,18 @@ export async function openAsWall(
     g?.type === 'Polygon' ? g.coordinates?.[0] : g?.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : undefined;
   if (!l || !f || !ring || ring.length < 4) return;
 
-  // distinct vertices — drop the closing duplicate if the ring is explicitly closed
   const n = ring.length;
   const closed = ring[0][0] === ring[n - 1][0] && ring[0][1] === ring[n - 1][1];
   const v = closed ? ring.slice(0, -1) : ring.slice();
   const m = v.length;
   const k = ((vertexIndex % m) + m) % m;
 
-  // rotate so the cut vertex is the first endpoint; leave it OPEN (no return to
-  // start) — the gate is the original edge v[k-1] → v[k].
   const line = v.slice(k).concat(v.slice(0, k));
   f.geometry = { type: 'LineString', coordinates: roundCoords(line) };
   f.properties = { ...f.properties, fill: false };
   await persist(l);
 }
 
-// move a layer up (dir -1) or down (dir +1) in the stack; order is the list
-// order in the panel AND the map z-order, and it is persisted to the manifest.
 export async function reorderLayer(id: string, dir: -1 | 1): Promise<void> {
   const i = store.layers.findIndex((l) => l.id === id);
   const j = i + dir;
@@ -225,28 +186,44 @@ export async function reorderLayer(id: string, dir: -1 | 1): Promise<void> {
   const arr = [...store.layers];
   [arr[i], arr[j]] = [arr[j], arr[i]];
   store.layers = arr;
-  commit();
-  await saveOrder(store.layers.map((l) => l.id));
+  try {
+    await saveOrder(store.layers.map((l) => l.id));
+    store.savedAt = Date.now();
+    store.error = null;
+  } catch (e) {
+    store.error = e instanceof Error ? e.message : String(e);
+  }
 }
 
-export function toggleVisible(id: string): void {
+export async function toggleVisible(id: string): Promise<void> {
   const l = find(id);
   if (!l) return;
   l.visible = !l.visible;
-  commit();
+  l.defaultVisible = l.visible;
+  await persist(l);
 }
 
 export async function removeLayer(id: string): Promise<void> {
   store.layers = store.layers.filter((l) => l.id !== id);
-  commit();
-  await deleteLayer(id);
+  try {
+    await deleteLayer(id);
+    store.savedAt = Date.now();
+    store.error = null;
+  } catch (e) {
+    store.error = e instanceof Error ? e.message : String(e);
+  }
 }
 
-// durable local write first (guaranteed), then the best-effort canonical export
+/** Write one layer to SQLite. */
 async function persist(l: Layer): Promise<void> {
-  commit();
-  await saveLayer(
-    { id: l.id, label: l.label, path: l.path, color: l.color, defaultVisible: l.defaultVisible },
-    plain(l.data),
-  );
+  try {
+    await saveLayer(
+      { id: l.id, label: l.label, path: l.path, color: l.color, defaultVisible: l.defaultVisible },
+      plain(l.data),
+    );
+    store.savedAt = Date.now();
+    store.error = null;
+  } catch (e) {
+    store.error = e instanceof Error ? e.message : String(e);
+  }
 }
