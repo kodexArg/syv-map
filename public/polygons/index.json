@@ -1,5 +1,12 @@
 [
   {
+    "id": "CE05_Pino",
+    "label": "CE05 Pino",
+    "path": "/polygons/CE05_Pino.geojson",
+    "color": "#2d6a4f",
+    "defaultVisible": true
+  },
+  {
     "id": "ruta-confederacion",
     "label": "Ruta de la Confederación Argentina",
     "path": "/polygons/ruta-confederacion.geojson",

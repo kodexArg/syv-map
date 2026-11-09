@@ -150,6 +150,21 @@
     });
   }
 
+  function fitLayer(layer: Layer) {
+    if (!map) return;
+    const bounds = new maplibregl.LngLatBounds();
+    let any = false;
+    const walk = (c: any) => {
+      if (!Array.isArray(c) || c.length === 0) return;
+      if (typeof c[0] === 'number') {
+        bounds.extend(c as [number, number]);
+        any = true;
+      } else c.forEach(walk);
+    };
+    for (const f of layer.data?.features ?? []) walk(f?.geometry?.coordinates);
+    if (any) map.fitBounds(bounds, { padding: 48, duration: 0, maxZoom: 11 });
+  }
+
   // --- reconcile store.layers -> maplibre sources/layers ---------------------
   function syncMap() {
     if (!map || !mapLoaded) return;
@@ -494,6 +509,10 @@
     // fondo fijo del universo, antes de sembrar las regiones editables
     addImpactOverlay(map);
     await loadLayers();
+    // CE05 Pino sits in Ñuble/Biobío (Chile), far from the Dársena default.
+    // Fit once so this layer is on screen; the default center stays Dársena.
+    const pino = store.layers.find((l) => l.id === 'CE05_Pino');
+    if (pino) fitLayer(pino);
   });
 
   onDestroy(() => {
